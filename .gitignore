@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# Packaging / install
+*.egg-info/
+dist/
+build/
+
+# Local DB / env
+*.db
+.env
+backend/_alembic_autogen.db
+
+# Tests / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini

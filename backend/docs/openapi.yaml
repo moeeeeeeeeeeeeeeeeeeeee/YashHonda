@@ -1,0 +1,362 @@
+openapi: 3.1.0
+info:
+  title: Yash Honda Quote API
+  version: 0.1.0
+  description: >
+    Initial API contract for the Yash Honda quote generation platform. The
+    contract is based on the surviving technical specification, stakeholder
+    PDFs, and the legacy workbook fields.
+servers:
+  - url: https://api.yashhonda.com/api/v1
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200":
+          description: Service is alive.
+  /masters/models:
+    get:
+      summary: List active vehicle variants available for quoting.
+      responses:
+        "200":
+          description: Vehicle pricing rows available for the quote engine.
+  /masters/accessories:
+    get:
+      summary: List accessories compatible with a variant, including interchange rules metadata.
+      parameters:
+        - in: query
+          name: variant_code
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Accessory master rows filtered by compatibility.
+  /masters/supporting:
+    get:
+      summary: List supporting masters used in the inquiry and quote forms.
+      responses:
+        "200":
+          description: Finance providers, areas, purchase modes, sales executives, and company profile.
+  /inquiries:
+    post:
+      summary: Create a new inquiry row in the shared sales workspace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InquiryCreate"
+      responses:
+        "200":
+          description: Inquiry created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inquiry"
+  /inquiries/open:
+    get:
+      summary: Return open inquiries for the daily board.
+      responses:
+        "200":
+          description: Open inquiries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InquiryListResponse"
+  /quotes/calculate:
+    post:
+      summary: Preview additive quote totals without persistence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteCalculationRequest"
+      responses:
+        "200":
+          description: Quote preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotePreview"
+        "422":
+          description: Invalid model, color, or incompatible request.
+  /quotes:
+    post:
+      summary: Persist a quote snapshot for an inquiry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteCreate"
+      responses:
+        "200":
+          description: Quote created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: Inquiry not found.
+  /quotes/{quoteId}:
+    get:
+      summary: Fetch a persisted quote by id.
+      parameters:
+        - in: path
+          name: quoteId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Quote response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: Quote not found.
+  /quotes/{quoteId}/pdf:
+    get:
+      summary: Return quote PDF metadata backed by private S3 storage.
+      parameters:
+        - in: path
+          name: quoteId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Quote PDF metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteDocumentLink"
+        "404":
+          description: Quote PDF not found.
+components:
+  schemas:
+    CustomerCreate:
+      type: object
+      required: [name, mobile]
+      properties:
+        name:
+          type: string
+        mobile:
+          type: string
+        email:
+          type: string
+          nullable: true
+    InquiryCreate:
+      type: object
+      required:
+        - customer
+        - source
+        - area
+        - vehicle_type
+        - model_code
+        - color
+        - purchase_mode
+        - sales_executive
+        - buying_when
+      properties:
+        customer:
+          $ref: "#/components/schemas/CustomerCreate"
+        source:
+          type: string
+        area:
+          type: string
+        vehicle_type:
+          type: string
+        model_code:
+          type: string
+        color:
+          type: string
+        purchase_mode:
+          type: string
+          enum: [cash, finance]
+        financer:
+          type: string
+          nullable: true
+        exchange:
+          type: boolean
+        old_vehicle:
+          type: string
+          nullable: true
+        kms:
+          type: integer
+          nullable: true
+        owner_count:
+          type: string
+          nullable: true
+        sales_executive:
+          type: string
+        buying_when:
+          type: string
+        remarks:
+          type: string
+          nullable: true
+    Inquiry:
+      allOf:
+        - $ref: "#/components/schemas/InquiryCreate"
+        - type: object
+          required: [id, status, created_at]
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [open, booked, closed]
+            created_at:
+              type: string
+              format: date-time
+    InquiryListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inquiry"
+    QuoteCalculationRequest:
+      type: object
+      required: [model_code, color, purchase_mode]
+      properties:
+        inquiry_id:
+          type: string
+          format: uuid
+          nullable: true
+        model_code:
+          type: string
+        color:
+          type: string
+        purchase_mode:
+          type: string
+          enum: [cash, finance]
+        financer:
+          type: string
+          nullable: true
+        selected_accessory_codes:
+          type: array
+          items:
+            type: string
+        include_extended_warranty:
+          type: boolean
+        include_optional_accessories:
+          type: boolean
+        include_helmet:
+          type: boolean
+        include_ceramic:
+          type: boolean
+    ChargeLine:
+      type: object
+      required: [code, description, amount, charge_type]
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        charge_type:
+          type: string
+          enum: [base, optional, finance_view]
+    FinanceTerms:
+      type: object
+      required: [down_payment, emi_24, emi_36, emi_48]
+      properties:
+        down_payment:
+          type: number
+        emi_24:
+          type: number
+        emi_36:
+          type: number
+        emi_48:
+          type: number
+    QuotePreview:
+      type: object
+      required:
+        - model_code
+        - display_name
+        - color
+        - purchase_mode
+        - lines
+        - finance_terms
+        - totals
+        - option_set
+      properties:
+        model_code:
+          type: string
+        display_name:
+          type: string
+        color:
+          type: string
+        purchase_mode:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChargeLine"
+        finance_terms:
+          $ref: "#/components/schemas/FinanceTerms"
+        totals:
+          type: object
+          properties:
+            subtotal:
+              type: number
+            grand_total:
+              type: number
+            currency:
+              type: string
+        option_set:
+          type: string
+    QuoteCreate:
+      allOf:
+        - $ref: "#/components/schemas/QuoteCalculationRequest"
+        - type: object
+          required: [inquiry_id]
+          properties:
+            inquiry_id:
+              type: string
+              format: uuid
+    Quote:
+      type: object
+      required: [id, inquiry_id, quote_number, status, preview, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        inquiry_id:
+          type: string
+          format: uuid
+        quote_number:
+          type: string
+        status:
+          type: string
+          enum: [draft, issued]
+        preview:
+          $ref: "#/components/schemas/QuotePreview"
+        pdf:
+          $ref: "#/components/schemas/QuoteDocumentLink"
+        created_at:
+          type: string
+          format: date-time
+    QuoteDocumentLink:
+      type: object
+      required: [storage_key, bucket, url, expires_at]
+      properties:
+        storage_key:
+          type: string
+        bucket:
+          type: string
+        url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
